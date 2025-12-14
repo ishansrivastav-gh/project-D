@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Swarm Drone Simulator - Defence Training Platform</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <!-- Main Application Container -->
+    <div class="app-container">
+        <!-- Top Header Bar -->
+        <header class="app-header">
+            <div class="header-left">
+                <i class="fas fa-drone"></i>
+                <h1>VIRTUAL SWARM DRONE SIMULATOR</h1>
+                <span class="version">v2.0 DEFENCE</span>
+            </div>
+            <div class="header-center">
+                <div class="status-indicator">
+                    <span class="status-dot active"></span>
+                    <span>SYSTEM ONLINE</span>
+                </div>
+                <div class="mission-status">
+                    <span>Mission: </span>
+                    <span id="missionName">STANDBY</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="time-display" id="timeDisplay">00:00:00</div>
+                <button class="btn-icon" id="settingsBtn" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button class="btn-icon" id="fullscreenBtn" title="Fullscreen">
+                    <i class="fas fa-expand"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Grid -->
+        <div class="main-grid">
+            <!-- LEFT PANEL: Drone View Panel -->
+            <section class="panel drone-view-panel">
+                <div class="panel-header">
+                    <h2><i class="fas fa-video"></i> Drone View</h2>
+                    <div class="view-controls">
+                        <button class="btn-sm" id="fpvBtn">FPV</button>
+                        <button class="btn-sm active" id="tpvBtn">TPV</button>
+                        <button class="btn-sm" id="swarmViewBtn">Swarm</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <!-- 3D Canvas -->
+                    <canvas id="droneCanvas"></canvas>
+                    
+                    <!-- Sensor Overlay HUD -->
+                    <div class="hud-overlay">
+                        <div class="hud-top">
+                            <div class="hud-item">
+                                <i class="fas fa-compass"></i>
+                                <span id="heading">000°</span>
+                            </div>
+                            <div class="hud-item">
+                                <i class="fas fa-crosshairs"></i>
+                                <span id="targetLock">NO LOCK</span>
+                            </div>
+                        </div>
+                        
+                        <div class="hud-left">
+                            <div class="sensor-data">
+                                <div class="sensor-item">
+                                    <span class="label">ALT:</span>
+                                    <span class="value" id="altitude">0m</span>
+                                </div>
+                                <div class="sensor-item">
+                                    <span class="label">SPD:</span>
+                                    <span class="value" id="speed">0m/s</span>
+                                </div>
+                                <div class="sensor-item">
+                                    <span class="label">BAT:</span>
+                                    <span class="value" id="battery">100%</span>
+                                </div>
+                                <div class="sensor-item">
+                                    <span class="label">GPS:</span>
+                                    <span class="value" id="gps">LOCKED</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="hud-right">
+                            <div class="minimap" id="minimap">
+                                <canvas id="minimapCanvas" width="150" height="150"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="hud-bottom">
+                            <div class="terrain-info">
+                                <span id="terrainType">URBAN</span>
+                                <span class="separator">|</span>
+                                <span id="timeOfDay">DAY</span>
+                                <span class="separator">|</span>
+                                <span id="weather">CLEAR</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CENTER PANEL: Control & Command Panel -->
+            <section class="panel control-panel">
+                <div class="panel-header">
+                    <h2><i class="fas fa-gamepad"></i> Control & Command</h2>
+                </div>
+                <div class="panel-content">
+                    <!-- Mission Controls -->
+                    <div class="control-section">
+                        <h3>Mission Controls</h3>
+                        <div class="button-group">
+                            <button class="btn btn-success" id="startMissionBtn">
+                                <i class="fas fa-play"></i> START
+                            </button>
+                            <button class="btn btn-warning" id="pauseMissionBtn">
+                                <i class="fas fa-pause"></i> PAUSE
+                            </button>
+                            <button class="btn btn-danger" id="recallBtn">
+                                <i class="fas fa-home"></i> RECALL
+                            </button>
+                            <button class="btn btn-info" id="regroupBtn">
+                                <i class="fas fa-layer-group"></i> REGROUP
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Swarm Configuration -->
+                    <div class="control-section">
+                        <h3>Swarm Configuration</h3>
+                        <div class="form-group">
+                            <label for="droneCount">Drone Count: <span id="droneCountValue">50</span></label>
+                            <input type="range" id="droneCount" min="10" max="1000" value="50" step="10">
+                        </div>
+                        <div class="form-group">
+                            <label for="formationType">Formation Type</label>
+                            <select id="formationType" class="select-input">
+                                <option value="grid">Grid Formation</option>
+                                <option value="vformation">V-Formation</option>
+                                <option value="circle">Circle Formation</option>
+                                <option value="sphere">Sphere Formation</option>
+                                <option value="line">Line Formation</option>
+                                <option value="random">Random Swarm</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="behaviorMode">Behavior Mode</label>
+                            <select id="behaviorMode" class="select-input">
+                                <option value="leader-follower">Leader-Follower</option>
+                                <option value="decentralized">Decentralized Swarm</option>
+                                <option value="hierarchical">Hierarchical</option>
+                                <option value="flocking">Flocking Behavior</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Swarm Parameters -->
+                    <div class="control-section">
+                        <h3>Swarm Parameters</h3>
+                        <div class="form-group">
+                            <label for="swarmSpeed">Speed: <span id="swarmSpeedValue">5</span> m/s</label>
+                            <input type="range" id="swarmSpeed" min="1" max="20" value="5" step="0.5">
+                        </div>
+                        <div class="form-group">
+                            <label for="spacing">Spacing: <span id="spacingValue">10</span> m</label>
+                            <input type="range" id="spacing" min="5" max="50" value="10" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="commLatency">Comm Latency: <span id="commLatencyValue">50</span> ms</label>
+                            <input type="range" id="commLatency" min="0" max="500" value="50" step="10">
+                        </div>
+                    </div>
+
+                    <!-- AI Parameters -->
+                    <div class="control-section">
+                        <h3>AI Behavior Weights</h3>
+                        <div class="form-group">
+                            <label for="separationWeight">Separation: <span id="separationWeightValue">1.5</span></label>
+                            <input type="range" id="separationWeight" min="0" max="5" value="1.5" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="alignmentWeight">Alignment: <span id="alignmentWeightValue">1.0</span></label>
+                            <input type="range" id="alignmentWeight" min="0" max="5" value="1.0" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="cohesionWeight">Cohesion: <span id="cohesionWeightValue">1.0</span></label>
+                            <input type="range" id="cohesionWeight" min="0" max="5" value="1.0" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="goalWeight">Goal Seeking: <span id="goalWeightValue">2.0</span></label>
+                            <input type="range" id="goalWeight" min="0" max="5" value="2.0" step="0.1">
+                        </div>
+                    </div>
+
+                    <!-- Waypoint Assignment -->
+                    <div class="control-section">
+                        <h3>Mission Waypoints</h3>
+                        <div class="waypoint-list" id="waypointList">
+                            <div class="waypoint-item">
+                                <span>WP1: (0, 0, 100)</span>
+                                <button class="btn-icon-sm"><i class="fas fa-times"></i></button>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" id="addWaypointBtn">
+                            <i class="fas fa-plus"></i> Add Waypoint
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RIGHT PANEL: Data, Analytics & Simulation Panel -->
+            <section class="panel analytics-panel">
+                <div class="panel-header">
+                    <h2><i class="fas fa-chart-line"></i> Analytics & Data</h2>
+                    <div class="panel-tabs">
+                        <button class="tab-btn active" data-tab="telemetry">Telemetry</button>
+                        <button class="tab-btn" data-tab="performance">Performance</button>
+                        <button class="tab-btn" data-tab="events">Events</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <!-- Telemetry Tab -->
+                    <div class="tab-content active" id="telemetryTab">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-icon"><i class="fas fa-drone"></i></div>
+                                <div class="stat-info">
+                                    <div class="stat-label">Active Drones</div>
+                                    <div class="stat-value" id="activeDrones">50</div>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon"><i class="fas fa-signal"></i></div>
+                                <div class="stat-info">
+                                    <div class="stat-label">Signal Strength</div>
+                                    <div class="stat-value" id="signalStrength">98%</div>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                                <div class="stat-info">
+                                    <div class="stat-label">Collisions Avoided</div>
+                                    <div class="stat-value" id="collisionsAvoided">0</div>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon"><i class="fas fa-map-marked"></i></div>
+                                <div class="stat-info">
+                                    <div class="stat-label">Coverage Area</div>
+                                    <div class="stat-value" id="coverageArea">0 km²</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Charts -->
+                        <div class="chart-container">
+                            <h4>Velocity Distribution</h4>
+                            <canvas id="velocityChart"></canvas>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h4>Position Tracking</h4>
+                            <canvas id="positionChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Performance Tab -->
+                    <div class="tab-content" id="performanceTab">
+                        <div class="score-display">
+                            <h3>Mission Score</h3>
+                            <div class="score-value" id="missionScore">0</div>
+                            <div class="score-breakdown">
+                                <div class="score-item">
+                                    <span>Formation Accuracy:</span>
+                                    <span id="formationScore">0%</span>
+                                </div>
+                                <div class="score-item">
+                                    <span>Collision Avoidance:</span>
+                                    <span id="collisionScore">100%</span>
+                                </div>
+                                <div class="score-item">
+                                    <span>Mission Completion:</span>
+                                    <span id="completionScore">0%</span>
+                                </div>
+                                <div class="score-item">
+                                    <span>Communication:</span>
+                                    <span id="commScore">100%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Heatmap -->
+                        <div class="heatmap-container">
+                            <h4>Swarm Coverage Heatmap</h4>
+                            <canvas id="heatmapCanvas" width="300" height="300"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Events Tab -->
+                    <div class="tab-content" id="eventsTab">
+                        <div class="event-controls">
+                            <button class="btn btn-sm" id="clearEventsBtn">Clear Log</button>
+                            <button class="btn btn-sm" id="exportEventsBtn">Export</button>
+                        </div>
+                        <div class="event-log" id="eventLog">
+                            <div class="event-item info">
+                                <span class="event-time">00:00:00</span>
+                                <span class="event-message">System initialized</span>
+                            </div>
+                        </div>
+
+                        <!-- Replay Controls -->
+                        <div class="replay-section">
+                            <h4>Mission Replay</h4>
+                            <div class="replay-controls">
+                                <button class="btn-icon" id="replayBackBtn"><i class="fas fa-backward"></i></button>
+                                <button class="btn-icon" id="replayPlayBtn"><i class="fas fa-play"></i></button>
+                                <button class="btn-icon" id="replayForwardBtn"><i class="fas fa-forward"></i></button>
+                            </div>
+                            <input type="range" id="replayTimeline" min="0" max="100" value="0" class="replay-timeline">
+                        </div>
+
+                        <!-- Failure Simulation -->
+                        <div class="failure-simulation">
+                            <h4>Failure Simulation</h4>
+                            <button class="btn btn-danger btn-sm" id="simulateCommFailure">
+                                <i class="fas fa-wifi-slash"></i> Comm Loss
+                            </button>
+                            <button class="btn btn-danger btn-sm" id="simulateNodeFailure">
+                                <i class="fas fa-power-off"></i> Node Failure
+                            </button>
+                            <button class="btn btn-danger btn-sm" id="simulatePacketLoss">
+                                <i class="fas fa-network-wired"></i> Packet Loss
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer Status Bar -->
+        <footer class="app-footer">
+            <div class="footer-left">
+                <span>FPS: <span id="fpsCounter">60</span></span>
+                <span class="separator">|</span>
+                <span>Simulation Speed: <span id="simSpeed">1.0x</span></span>
+            </div>
+            <div class="footer-center">
+                <span id="systemMessage">System ready for mission deployment</span>
+            </div>
+            <div class="footer-right">
+                <span>Defence Training Platform</span>
+                <span class="separator">|</span>
+                <span>&copy; 2024 Virtual Swarm Simulator</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
