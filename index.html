@@ -9,6 +9,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=geometry,visualization"></script>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.min.js"></script>
 </head>
 <body>
     <!-- Main Application Container -->
@@ -55,7 +58,16 @@
                 </div>
                 <div class="panel-content">
                     <!-- 3D Canvas -->
+                    <div id="mapContainer" style="display: none; width: 100%; height: 100%;">
+                        <div id="googleMap" style="width: 100%; height: 100%;"></div>
+                    </div>
                     <canvas id="droneCanvas"></canvas>
+                    <div id="vrContainer" style="display: none; width: 100%; height: 100%;">
+                        <a-scene embedded ar="webxr: false; vr: true;">
+                            <a-entity id="droneEntity" position="0 0 -5" geometry="primitive: box" material="color: #00d4ff"></a-entity>
+                            <a-camera></a-camera>
+                        </a-scene>
+                    </div>
                     
                     <!-- Sensor Overlay HUD -->
                     <div class="hud-overlay">
@@ -369,3 +381,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+
