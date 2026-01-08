@@ -12,6 +12,17 @@ let terrain;
 let animationId;
 let clock = new THREE.Clock();
 
+// Google Maps Integration
+let googleMap;
+let mapMarkers = [];
+let mapPolygons = [];
+
+// AR/VR Integration
+let vrScene;
+let arScene;
+let xrSession = null;
+let xrRefSpace = null;
+
 // Simulation State
 const simulationState = {
     isRunning: false,
@@ -60,6 +71,8 @@ let velocityChart, positionChart;
 // ========== INITIALIZATION ==========
 document.addEventListener('DOMContentLoaded', function() {
     initThreeJS();
+    initGoogleMaps();
+    initARVR();
     initUI();
     initCharts();
     initEventListeners();
@@ -284,6 +297,9 @@ class Drone {
         const light = new THREE.Mesh(lightGeometry, lightMaterial);
         light.position.y = 0.5;
         group.add(light);
+        
+        // Add unique ID for AR/VR tracking
+        group.userData = { droneId: this.id };
         
         group.position.copy(this.position);
         scene.add(group);
@@ -603,6 +619,16 @@ function animate() {
         if (Math.random() < 0.1) { // Update 10% of frames
             updateAnalytics();
         }
+        
+        // Update Google Maps if in map view
+        if (document.getElementById('mapContainer').style.display === 'block') {
+            updateMapWithDrones();
+        }
+        
+        // Update VR/AR if in those views
+        if (document.getElementById('vrContainer').style.display === 'block') {
+            updateVRWithDrones();
+        }
     }
     
     // Render
@@ -625,6 +651,14 @@ function initUI() {
             this.classList.add('active');
         });
     });
+    
+    // Add Google Maps and VR view controls
+    const viewControls = document.querySelector('.view-controls');
+    viewControls.insertAdjacentHTML('beforeend', `
+        <button class="btn-sm" id="googleMapViewBtn">Map</button>
+        <button class="btn-sm" id="vrViewBtn">VR</button>
+        <button class="btn-sm" id="arViewBtn">AR</button>
+    `);
 }
 
 function switchTab(tabName) {
@@ -715,6 +749,11 @@ function initEventListeners() {
     document.getElementById('pauseMissionBtn').addEventListener('click', pauseMission);
     document.getElementById('recallBtn').addEventListener('click', recallSwarm);
     document.getElementById('regroupBtn').addEventListener('click', regroupSwarm);
+    
+    // Google Maps and VR/AR Controls
+    document.getElementById('googleMapViewBtn').addEventListener('click', () => switchView('map'));
+    document.getElementById('vrViewBtn').addEventListener('click', () => switchView('vr'));
+    document.getElementById('arViewBtn').addEventListener('click', () => switchView('ar'));
     
     // Drone Count Slider
     document.getElementById('droneCount').addEventListener('input', function(e) {
@@ -888,10 +927,18 @@ function switchView(view) {
     const buttons = [
         document.getElementById('fpvBtn'),
         document.getElementById('tpvBtn'),
-        document.getElementById('swarmViewBtn')
+        document.getElementById('swarmViewBtn'),
+        document.getElementById('googleMapViewBtn'),
+        document.getElementById('vrViewBtn'),
+        document.getElementById('arViewBtn')
     ];
     
     buttons.forEach(btn => btn.classList.remove('active'));
+    
+    // Hide all containers
+    document.getElementById('droneCanvas').style.display = 'block';
+    document.getElementById('mapContainer').style.display = 'none';
+    document.getElementById('vrContainer').style.display = 'none';
     
     switch(view) {
         case 'fpv':
@@ -910,6 +957,24 @@ function switchView(view) {
             camera.position.set(0, 400, 0);
             camera.lookAt(0, 0, 0);
             document.getElementById('swarmViewBtn').classList.add('active');
+            break;
+        case 'map':
+            document.getElementById('droneCanvas').style.display = 'none';
+            document.getElementById('mapContainer').style.display = 'block';
+            document.getElementById('googleMapViewBtn').classList.add('active');
+            updateMapWithDrones();
+            break;
+        case 'vr':
+            document.getElementById('droneCanvas').style.display = 'none';
+            document.getElementById('vrContainer').style.display = 'block';
+            document.getElementById('vrViewBtn').classList.add('active');
+            updateVRWithDrones();
+            break;
+        case 'ar':
+            document.getElementById('droneCanvas').style.display = 'none';
+            document.getElementById('vrContainer').style.display = 'block'; // Reusing VR container for AR
+            document.getElementById('arViewBtn').classList.add('active');
+            initializeAR();
             break;
     }
 }
@@ -935,6 +1000,11 @@ function updateHUD() {
         
         // GPS
         document.getElementById('gps').textContent = 'LOCKED';
+        
+        // GPS Coordinates for map integration
+        const lat = 37.7749 + (drone.position.x / 100000);
+        const lng = -122.4194 + (drone.position.z / 100000);
+        document.getElementById('gps').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     }
     
     // Terrain info
@@ -1172,6 +1242,189 @@ function simulatePacketLoss() {
     }, 3000);
 }
 
+// ========== GOOGLE MAPS INTEGRATION ==========
+function initGoogleMaps() {
+    if (typeof google !== 'undefined' && typeof google.maps !== 'undefined') {
+        const mapOptions = {
+            zoom: 15,
+            center: { lat: 37.7749, lng: -122.4194 }, // Default to San Francisco
+            mapTypeId: 'satellite',
+            fullscreenControl: false,
+            streetViewControl: false,
+            mapTypeControl: true,
+            zoomControl: true,
+            gestureHandling: 'cooperative'
+        };
+        
+        googleMap = new google.maps.Map(document.getElementById('googleMap'), mapOptions);
+        
+        // Add initial markers for drones
+        updateMapWithDrones();
+        
+        logEvent('Google Maps integration initialized', 'info');
+    } else {
+        logEvent('Google Maps API not loaded - skipping integration', 'warning');
+    }
+}
+
+function updateMapWithDrones() {
+    if (!googleMap) return;
+    
+    // Clear existing markers
+    mapMarkers.forEach(marker => marker.setMap(null));
+    mapMarkers = [];
+    
+    // Add markers for each drone
+    drones.forEach((drone, index) => {
+        // Convert 3D coordinates to approximate lat/lng
+        // This is a simplified conversion for demonstration
+        const lat = 37.7749 + (drone.position.x / 100000);
+        const lng = -122.4194 + (drone.position.z / 100000);
+        
+        const marker = new google.maps.Marker({
+            position: { lat: lat, lng: lng },
+            map: googleMap,
+            title: `Drone ${drone.id}`,
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 6,
+                fillColor: '#00d4ff',
+                fillOpacity: 1,
+                strokeColor: '#ffffff',
+                strokeWeight: 1
+            }
+        });
+        
+        // Add info window
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div style="color: #000;">
+                    <strong>Drone ${drone.id}</strong><br>
+                    Altitude: ${drone.position.y.toFixed(1)}m<br>
+                    Battery: ${drone.battery.toFixed(1)}%<br>
+                    Status: ${drone.status}
+                </div>
+            `
+        });
+        
+        marker.addListener('click', () => {
+            infoWindow.open(googleMap, marker);
+        });
+        
+        mapMarkers.push(marker);
+    });
+    
+    // Add polyline for waypoints
+    const path = waypoints.map(wp => {
+        // Convert 3D coordinates to approximate lat/lng
+        const lat = 37.7749 + (wp.x / 100000);
+        const lng = -122.4194 + (wp.z / 100000);
+        return { lat: lat, lng: lng };
+    });
+    
+    if (path.length > 1) {
+        const route = new google.maps.Polyline({
+            path: path,
+            geodesic: true,
+            strokeColor: '#ff6b6b',
+            strokeOpacity: 1.0,
+            strokeWeight: 3
+        });
+        
+        route.setMap(googleMap);
+        mapPolygons.push(route);
+    }
+}
+
+// ========== AR/VR INTEGRATION ==========
+function initARVR() {
+    // Initialize WebXR polyfill if needed
+    if ('xr' in navigator) {
+        logEvent('WebXR API available', 'info');
+    } else {
+        logEvent('WebXR not available, using fallback', 'warning');
+    }
+    
+    // Initialize A-Frame scene
+    initializeAFRAME();
+}
+
+function initializeAFRAME() {
+    // A-Frame scene is already defined in HTML
+    // Just log that it's ready
+    logEvent('A-Frame VR scene initialized', 'info');
+}
+
+function updateVRWithDrones() {
+    // Update A-Frame entities to match drone positions
+    drones.forEach((drone, index) => {
+        const entity = document.querySelector(`#drone_${drone.id}`);
+        if (!entity) {
+            // Create entity if it doesn't exist
+            const scene = document.querySelector('a-scene');
+            const droneEntity = document.createElement('a-entity');
+            droneEntity.id = `drone_${drone.id}`;
+            droneEntity.setAttribute('geometry', 'primitive: box; width: 0.2; height: 0.05; depth: 0.2');
+            droneEntity.setAttribute('material', 'color: #00d4ff');
+            droneEntity.setAttribute('position', `${drone.position.x/100} ${drone.position.y/100} ${drone.position.z/100}`);
+            scene.appendChild(droneEntity);
+        } else {
+            // Update existing entity position
+            entity.setAttribute('position', `${drone.position.x/100} ${drone.position.y/100} ${drone.position.z/100}`);
+        }
+    });
+}
+
+function initializeAR() {
+    logEvent('Initializing AR mode', 'info');
+    
+    // Request AR session
+    if (navigator.xr) {
+        navigator.xr.requestSession('immersive-ar').then(session => {
+            xrSession = session;
+            logEvent('AR session started', 'info');
+            
+            // Set up AR reference space
+            session.requestReferenceSpace('local').then(refSpace => {
+                xrRefSpace = refSpace;
+                
+                // Start rendering loop
+                session.requestAnimationFrame(onXRFrame);
+            });
+        }).catch(err => {
+            logEvent(`AR initialization failed: ${err.message}`, 'error');
+        });
+    } else {
+        logEvent('WebXR AR not supported, falling back to VR', 'warning');
+        // Fall back to VR mode
+        switchView('vr');
+    }
+}
+
+function onXRFrame(time, frame) {
+    if (!xrSession) return;
+    
+    // Continue the animation frame
+    xrSession.requestAnimationFrame(onXRFrame);
+    
+    // Get viewer pose
+    const pose = frame.getViewerPose(xrRefSpace);
+    if (pose) {
+        // Process AR tracking data
+        // Update drone positions in AR space
+        updateARDrones(pose);
+    }
+}
+
+function updateARDrones(pose) {
+    // Update drone positions based on real-world tracking
+    drones.forEach((drone, index) => {
+        // In a real AR implementation, this would place drones in physical space
+        // For now, we'll just log the position
+        logEvent(`AR: Drone ${drone.id} at (${drone.position.x.toFixed(1)}, ${drone.position.y.toFixed(1)}, ${drone.position.z.toFixed(1)})`, 'info');
+    });
+}
+
 // ========== UTILITY FUNCTIONS ==========
 function startClock() {
     setInterval(() => {
@@ -1234,3 +1487,4 @@ setInterval(() => {
 
 // Initial system message
 document.getElementById('systemMessage').textContent = 'Virtual Swarm Drone Simulator initialized - Ready for training';
+
